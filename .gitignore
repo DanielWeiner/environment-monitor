@@ -1,0 +1,45 @@
+# Build output
+/build/
+/Debug/
+/Release/
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.ninja
+.ninja_deps
+.ninja_log
+
+# STM32CubeMX generated files (optional, if you want to ignore generated code)
+*.ioc
+
+# VSCode settings
+.vscode/
+
+# User-specific files
+*.swp
+*.swo
+*.swn
+*.bak
+*.tmp
+*.user
+
+# Object files, binaries, libraries
+*.o
+*.a
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+
+# Logs
+*.log
+
+# Other
+*.d
+*.dep
+*.pyc
+__pycache__/
