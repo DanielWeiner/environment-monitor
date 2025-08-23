@@ -12,8 +12,7 @@ Makefile
 .ninja_deps
 .ninja_log
 
-# STM32CubeMX generated files (optional, if you want to ignore generated code)
-*.ioc
+
 
 # VSCode settings
 .vscode/
