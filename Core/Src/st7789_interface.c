@@ -1,8 +1,7 @@
 #include "cmsis_os.h"
 #include "driver_st7789_interface.h"
 #include "log.h"
-#include "main.h"
-#include "stm32l4xx_hal.h"
+#include "spi.h"
 #include <stdarg.h>
 
 extern SPI_HandleTypeDef hspi1;
