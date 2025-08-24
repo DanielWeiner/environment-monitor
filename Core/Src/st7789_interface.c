@@ -35,14 +35,14 @@ uint8_t st7789_interface_spi_deinit(void) { return 0; }
  * @note      none
  */
 uint8_t st7789_interface_spi_write_cmd(uint8_t *buf, uint16_t len) {
-  HAL_GPIO_WritePin(SPI1_CSX_GPIO_Port, SPI1_CSX_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_RESET);
 
   if (HAL_SPI_Transmit(&hspi1, buf, len, HAL_MAX_DELAY) != HAL_OK) {
-    HAL_GPIO_WritePin(SPI1_CSX_GPIO_Port, SPI1_CSX_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_SET);
     return 1;
   }
 
-  HAL_GPIO_WritePin(SPI1_CSX_GPIO_Port, SPI1_CSX_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_SET);
   return 0;
 }
 
@@ -92,7 +92,7 @@ uint8_t st7789_interface_cmd_data_gpio_deinit(void) { return 0; }
  * @note      none
  */
 uint8_t st7789_interface_cmd_data_gpio_write(uint8_t value) {
-  HAL_GPIO_WritePin(SPI1_DCX_GPIO_Port, SPI1_DCX_Pin, (GPIO_PinState)(value));
+  HAL_GPIO_WritePin(LCD_DCX_GPIO_Port, LCD_DCX_Pin, (GPIO_PinState)(value));
   return 0;
 }
 
@@ -123,6 +123,6 @@ uint8_t st7789_interface_reset_gpio_deinit(void) { return 0; }
  * @note      none
  */
 uint8_t st7789_interface_reset_gpio_write(uint8_t value) {
-  HAL_GPIO_WritePin(SPI1_RST_GPIO_Port, SPI1_RST_Pin, (GPIO_PinState)(value));
+  HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, (GPIO_PinState)(value));
   return 0;
 }
