@@ -28,6 +28,7 @@
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
+typedef StaticTask_t osStaticThreadDef_t;
 typedef StaticSemaphore_t osStaticMutexDef_t;
 /* USER CODE BEGIN PTD */
 
@@ -50,9 +51,14 @@ UART_HandleTypeDef huart2;
 
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
+uint32_t defaultTaskBuffer[256];
+osStaticThreadDef_t defaultTaskControlBlock;
 const osThreadAttr_t defaultTask_attributes = {
     .name = "defaultTask",
-    .stack_size = 128 * 4,
+    .cb_mem = &defaultTaskControlBlock,
+    .cb_size = sizeof(defaultTaskControlBlock),
+    .stack_mem = &defaultTaskBuffer[0],
+    .stack_size = sizeof(defaultTaskBuffer),
     .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for logMutex */
@@ -323,7 +329,7 @@ static void MX_GPIO_Init(void) {
   GPIO_InitStruct.Pin = LCD_DCX_Pin | LCD_CSX_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LCD_RST_Pin */
@@ -368,12 +374,12 @@ void StartDefaultTask(void *argument) {
   /* Infinite loop */
   lcd_init();
   log_printf("Hello World!\r\n");
-  lcd_fill_rect(20, 20, 100, 100, 0xB0FA);
-  lcd_fill_rect(100, 40, 160, 131, 0xDEE2);
-
+  static char tickStr[10] = {0};
   for (;;) {
-
-    osDelay(1);
+    lcd_fill_rect(80, 160, 220, 184, 0);
+    int len = snprintf(tickStr, sizeof(tickStr), "%lu", osKernelGetTickCount());
+    lcd_string(80, 160, tickStr, len + 1, 0xFFFF, ST7789_FONT_24);
+    osDelay(13);
   }
   /* USER CODE END 5 */
 }
