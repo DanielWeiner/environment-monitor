@@ -3,13 +3,8 @@
 #include "stm32l4xx_hal.h"
 #include <stdio.h>
 
-static osMutexId_t logMutex;
+extern osMutexId_t logMutexHandle;
 extern UART_HandleTypeDef huart2;
-
-void log_init(void) {
-  logMutex = osMutexNew(
-      &(osMutexAttr_t){.attr_bits = osMutexPrioInherit | osMutexRecursive});
-}
 
 void log_printf(const char *fmt, ...) {
   va_list args;
@@ -24,11 +19,11 @@ void _log_printf(const char *fmt, va_list args) {
   if (length < 0)
     return;
 
-  if (logMutex)
-    osMutexAcquire(logMutex, osWaitForever);
+  if (logMutexHandle)
+    osMutexAcquire(logMutexHandle, osWaitForever);
   HAL_UART_Transmit(&huart2, (uint8_t *)buf,
                     (length < LOG_MAX_SIZE) ? length : LOG_MAX_SIZE - 1,
                     HAL_MAX_DELAY);
-  if (logMutex)
-    osMutexRelease(logMutex);
+  if (logMutexHandle)
+    osMutexRelease(logMutexHandle);
 }
