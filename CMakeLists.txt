@@ -45,11 +45,18 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/src/driver_st7789.c
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/example/driver_st7789_basic.c
+	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/st7789_interface.c
+	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/log.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/src
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/example
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/interface
 )
 
 # Add project symbols (macros)
