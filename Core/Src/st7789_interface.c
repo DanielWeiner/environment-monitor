@@ -4,9 +4,7 @@
 #include "main.h"
 #include "stm32l4xx_hal.h"
 #include <stdarg.h>
-#include <stdio.h>
 
-extern st7789_handle_t lcd;
 extern SPI_HandleTypeDef hspi1;
 
 /**
