@@ -19,14 +19,16 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
-#include "task.h"
-#include "main.h"
 #include "cmsis_os.h"
+#include "main.h"
+#include "task.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "atc.h"
 #include "lcd.h"
 #include "log.h"
+#include "usart.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,25 +53,38 @@ typedef StaticSemaphore_t osStaticMutexDef_t;
 
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
+extern ATC_HandleTypeDef hatc1;
 osThreadId_t defaultTaskHandle;
-uint32_t defaultTaskBuffer[ 256 ];
+uint32_t defaultTaskBuffer[256];
 osStaticThreadDef_t defaultTaskControlBlock;
 const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .cb_mem = &defaultTaskControlBlock,
-  .cb_size = sizeof(defaultTaskControlBlock),
-  .stack_mem = &defaultTaskBuffer[0],
-  .stack_size = sizeof(defaultTaskBuffer),
-  .priority = (osPriority_t) osPriorityNormal,
+    .name = "defaultTask",
+    .cb_mem = &defaultTaskControlBlock,
+    .cb_size = sizeof(defaultTaskControlBlock),
+    .stack_mem = &defaultTaskBuffer[0],
+    .stack_size = sizeof(defaultTaskBuffer),
+    .priority = (osPriority_t)osPriorityNormal,
+};
+/* Definitions for esp8266ATTask */
+osThreadId_t esp8266ATTaskHandle;
+uint32_t esp8266ATTaskBuffer[256];
+osStaticThreadDef_t esp8266ATTaskControlBlock;
+const osThreadAttr_t esp8266ATTask_attributes = {
+    .name = "esp8266ATTask",
+    .cb_mem = &esp8266ATTaskControlBlock,
+    .cb_size = sizeof(esp8266ATTaskControlBlock),
+    .stack_mem = &esp8266ATTaskBuffer[0],
+    .stack_size = sizeof(esp8266ATTaskBuffer),
+    .priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for logMutex */
 osMutexId_t logMutexHandle;
 osStaticMutexDef_t logMutexControlBlock;
 const osMutexAttr_t logMutex_attributes = {
-  .name = "logMutex",
-  .attr_bits = osMutexRecursive,
-  .cb_mem = &logMutexControlBlock,
-  .cb_size = sizeof(logMutexControlBlock),
+    .name = "logMutex",
+    .attr_bits = osMutexRecursive,
+    .cb_mem = &logMutexControlBlock,
+    .cb_size = sizeof(logMutexControlBlock),
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -78,14 +93,15 @@ const osMutexAttr_t logMutex_attributes = {
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
+void StartESP8266ATTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
-  * @brief  FreeRTOS initialization
-  * @param  None
-  * @retval None
-  */
+ * @brief  FreeRTOS initialization
+ * @param  None
+ * @retval None
+ */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
 
@@ -113,7 +129,12 @@ void MX_FREERTOS_Init(void) {
 
   /* Create the thread(s) */
   /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  defaultTaskHandle =
+      osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of esp8266ATTask */
+  esp8266ATTaskHandle =
+      osThreadNew(StartESP8266ATTask, NULL, &esp8266ATTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -122,7 +143,6 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
-
 }
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -132,8 +152,7 @@ void MX_FREERTOS_Init(void) {
  * @retval None
  */
 /* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
+void StartDefaultTask(void *argument) {
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
   lcd_init();
@@ -148,8 +167,24 @@ void StartDefaultTask(void *argument)
   /* USER CODE END StartDefaultTask */
 }
 
+/* USER CODE BEGIN Header_StartESP8266ATTask */
+/**
+ * @brief Function implementing the esp8266ATTask thread.
+ * @param argument: Not used
+ * @retval None
+ */
+/* USER CODE END Header_StartESP8266ATTask */
+void StartESP8266ATTask(void *argument) {
+  /* USER CODE BEGIN StartESP8266ATTask */
+  /* Infinite loop */
+  for (;;) {
+    ATC_Loop(&hatc1);
+    osDelay(1);
+  }
+  /* USER CODE END StartESP8266ATTask */
+}
+
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-
