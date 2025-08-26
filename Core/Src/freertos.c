@@ -81,7 +81,7 @@ const osThreadAttr_t esp8266ATTask_attributes = {
 	.cb_size = sizeof(esp8266ATTaskControlBlock),
 	.stack_mem = &esp8266ATTaskBuffer[0],
 	.stack_size = sizeof(esp8266ATTaskBuffer),
-	.priority = (osPriority_t)osPriorityHigh,
+	.priority = (osPriority_t)osPriorityLow,
 };
 /* Definitions for esp8266Dispatch */
 osThreadId_t		 esp8266DispatchHandle;
@@ -93,7 +93,7 @@ const osThreadAttr_t esp8266Dispatch_attributes = {
 	.cb_size = sizeof(esp8266DispatchControlBlock),
 	.stack_mem = &esp8266DispatchBuffer[0],
 	.stack_size = sizeof(esp8266DispatchBuffer),
-	.priority = (osPriority_t)osPriorityBelowNormal1,
+	.priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for logTask */
 osThreadId_t		 logTaskHandle;
@@ -247,7 +247,7 @@ void StartESP8266ATTask(void *argument) {
 	/* Infinite loop */
 	for (;;) {
 		at_consume_rx(&esp8266ATHandle);
-		osDelay(1);
+		vTaskDelay(0);
 	}
 	/* USER CODE END StartESP8266ATTask */
 }
@@ -330,7 +330,7 @@ void StartLogTask(void *argument) {
 	/* Infinite loop */
 	for (;;) {
 		output_log_buffer();
-		osDelay(1);
+		vTaskDelay(0);
 	}
 	/* USER CODE END StartLogTask */
 }
