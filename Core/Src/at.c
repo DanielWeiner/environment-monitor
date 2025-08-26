@@ -71,9 +71,7 @@ void at_tx_complete(UART_HandleTypeDef *huart, AT_Handle *handle) {
 }
 
 void at_consume_rx(AT_Handle *handle) {
-	uint16_t rxIndex = handle->rxIndex;
-
-	while (handle->readIndex != rxIndex) {
+	while (handle->readIndex != handle->rxIndex) {
 		char ch = handle->rxBuffer[handle->readIndex++];
 		handle->readIndex %= handle->rxBufferSize;
 
