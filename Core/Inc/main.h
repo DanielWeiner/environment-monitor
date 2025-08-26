@@ -81,6 +81,8 @@ void Error_Handler(void);
 #define VCP_RX_GPIO_Port GPIOA
 #define LD3_Pin GPIO_PIN_3
 #define LD3_GPIO_Port GPIOB
+#define ESP_RST_Pin GPIO_PIN_5
+#define ESP_RST_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

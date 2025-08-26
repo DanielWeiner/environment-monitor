@@ -49,6 +49,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/example/driver_st7789_basic.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/st7789_interface.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/log.c
+	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/at.c
+	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/token.c
 )
 
 # Add include paths

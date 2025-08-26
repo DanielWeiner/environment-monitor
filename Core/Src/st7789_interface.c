@@ -1,8 +1,9 @@
+#include <stdarg.h>
+
 #include "cmsis_os.h"
 #include "driver_st7789_interface.h"
 #include "log.h"
 #include "spi.h"
-#include <stdarg.h>
 
 extern SPI_HandleTypeDef hspi1;
 
@@ -13,7 +14,9 @@ extern SPI_HandleTypeDef hspi1;
  *         - 1 spi init failed
  * @note   none
  */
-uint8_t st7789_interface_spi_init(void) { return 0; }
+uint8_t st7789_interface_spi_init(void) {
+	return 0;
+}
 
 /**
  * @brief  interface spi bus deinit
@@ -22,7 +25,9 @@ uint8_t st7789_interface_spi_init(void) { return 0; }
  *         - 1 spi deinit failed
  * @note   none
  */
-uint8_t st7789_interface_spi_deinit(void) { return 0; }
+uint8_t st7789_interface_spi_deinit(void) {
+	return 0;
+}
 
 /**
  * @brief     interface spi bus write
@@ -34,15 +39,15 @@ uint8_t st7789_interface_spi_deinit(void) { return 0; }
  * @note      none
  */
 uint8_t st7789_interface_spi_write_cmd(uint8_t *buf, uint16_t len) {
-  HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_RESET);
 
-  if (HAL_SPI_Transmit(&hspi1, buf, len, HAL_MAX_DELAY) != HAL_OK) {
-    HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_SET);
-    return 1;
-  }
+	if (HAL_SPI_Transmit(&hspi1, buf, len, HAL_MAX_DELAY) != HAL_OK) {
+		HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_SET);
+		return 1;
+	}
 
-  HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_SET);
-  return 0;
+	HAL_GPIO_WritePin(LCD_CSX_GPIO_Port, LCD_CSX_Pin, GPIO_PIN_SET);
+	return 0;
 }
 
 /**
@@ -50,7 +55,9 @@ uint8_t st7789_interface_spi_write_cmd(uint8_t *buf, uint16_t len) {
  * @param[in] ms time
  * @note      none
  */
-void st7789_interface_delay_ms(uint32_t ms) { osDelay(ms); }
+void st7789_interface_delay_ms(uint32_t ms) {
+	osDelay(ms);
+}
 
 /**
  * @brief     interface print format data
@@ -58,10 +65,10 @@ void st7789_interface_delay_ms(uint32_t ms) { osDelay(ms); }
  * @note      none
  */
 void st7789_interface_debug_print(const char *const fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  _log_printf(fmt, args);
-  va_end(args);
+	va_list args;
+	va_start(args, fmt);
+	log_printf_va_list(fmt, args);
+	va_end(args);
 }
 
 /**
@@ -71,7 +78,9 @@ void st7789_interface_debug_print(const char *const fmt, ...) {
  *         - 1 gpio init failed
  * @note   none
  */
-uint8_t st7789_interface_cmd_data_gpio_init(void) { return 0; }
+uint8_t st7789_interface_cmd_data_gpio_init(void) {
+	return 0;
+}
 
 /**
  * @brief  interface command && data gpio deinit
@@ -80,7 +89,9 @@ uint8_t st7789_interface_cmd_data_gpio_init(void) { return 0; }
  *         - 1 gpio deinit failed
  * @note   none
  */
-uint8_t st7789_interface_cmd_data_gpio_deinit(void) { return 0; }
+uint8_t st7789_interface_cmd_data_gpio_deinit(void) {
+	return 0;
+}
 
 /**
  * @brief     interface command && data gpio write
@@ -91,8 +102,8 @@ uint8_t st7789_interface_cmd_data_gpio_deinit(void) { return 0; }
  * @note      none
  */
 uint8_t st7789_interface_cmd_data_gpio_write(uint8_t value) {
-  HAL_GPIO_WritePin(LCD_DCX_GPIO_Port, LCD_DCX_Pin, (GPIO_PinState)(value));
-  return 0;
+	HAL_GPIO_WritePin(LCD_DCX_GPIO_Port, LCD_DCX_Pin, (GPIO_PinState)(value));
+	return 0;
 }
 
 /**
@@ -102,7 +113,9 @@ uint8_t st7789_interface_cmd_data_gpio_write(uint8_t value) {
  *         - 1 gpio init failed
  * @note   none
  */
-uint8_t st7789_interface_reset_gpio_init(void) { return 0; }
+uint8_t st7789_interface_reset_gpio_init(void) {
+	return 0;
+}
 
 /**
  * @brief  interface reset gpio deinit
@@ -111,7 +124,9 @@ uint8_t st7789_interface_reset_gpio_init(void) { return 0; }
  *         - 1 gpio deinit failed
  * @note   none
  */
-uint8_t st7789_interface_reset_gpio_deinit(void) { return 0; }
+uint8_t st7789_interface_reset_gpio_deinit(void) {
+	return 0;
+}
 
 /**
  * @brief     interface reset gpio write
@@ -122,6 +137,6 @@ uint8_t st7789_interface_reset_gpio_deinit(void) { return 0; }
  * @note      none
  */
 uint8_t st7789_interface_reset_gpio_write(uint8_t value) {
-  HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, (GPIO_PinState)(value));
-  return 0;
+	HAL_GPIO_WritePin(LCD_RST_GPIO_Port, LCD_RST_Pin, (GPIO_PinState)(value));
+	return 0;
 }
