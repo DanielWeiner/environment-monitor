@@ -1,9 +1,6 @@
 #include "at.h"
 
-#include <stdio.h>
-
 #include "cmsis_os.h"
-#include "log.h"
 
 extern osMutexId_t esp8266ATMutexHandle;
 extern osMutexId_t esp8266TxChunkMutexHandle;
