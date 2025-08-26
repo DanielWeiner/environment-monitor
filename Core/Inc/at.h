@@ -15,6 +15,7 @@ typedef struct AT_TokenHandler {
 } AT_TokenHandler;
 
 typedef struct AT_Handle {
+	char		   rxByte;
 	char *const	   rxBuffer;
 	char *const	   txBuffer;
 	const uint16_t rxBufferSize;
