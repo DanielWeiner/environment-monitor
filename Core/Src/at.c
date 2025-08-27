@@ -208,7 +208,7 @@ void at_consume_rx(AT_Handle *handle) {
 	bool	 fullBuffer;
 	get_rx_buffer_info(handle, &rxIndex, &fullBuffer);
 
-	while (handle->readIndex != rxIndex || fullBuffer) {
+	if (handle->readIndex != rxIndex || fullBuffer) {
 		fullBuffer = false;
 		char ch = handle->rxBuffer[handle->readIndex++];
 		handle->readIndex %= handle->rxBufferSize;

@@ -349,8 +349,9 @@ void StartESP8266Dispatch(void *argument) {
 		osDelay(1);
 	}
 
+	printf("ESP8266 is ready\r\n");
+	printf("ESP8266 firmware info:\r\n");
 	AT_GmrPhase gmrPhase = AT_GMR_INIT;
-
 	at_set_callback_data(&esp8266ATHandle, &gmrPhase);
 	at_on_rx_byte(&esp8266ATHandle, on_gmr_char);
 	at_set_tokens(&esp8266ATHandle, gmrHandlers);
