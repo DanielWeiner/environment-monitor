@@ -273,7 +273,6 @@ void StartESP8266ATTask(void *argument) {
 	/* Infinite loop */
 	for (;;) {
 		at_consume_rx(&esp8266ATHandle);
-		taskYIELD();
 	}
 	/* USER CODE END StartESP8266ATTask */
 }
