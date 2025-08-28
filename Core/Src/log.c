@@ -8,10 +8,11 @@
 
 extern osMutexId_t		  logMutexHandle;
 extern UART_HandleTypeDef huart2;
-static Log_HandleTypeDef  logHandle = {
-	 .writeIndex = 0,
-	 .readIndex = 0,
-};
+static Log_HandleTypeDef  logHandle = {0};
+
+void log_init(osThreadId_t taskHandle) {
+	logHandle.logTask = taskHandle;
+}
 
 void log_printf(const char *fmt, ...) {
 	va_list args;
@@ -37,6 +38,7 @@ void log_printf_va_list(const char *fmt, va_list args) {
 	}
 	logHandle.writeIndex = nextIndex;
 	if (logMutexHandle) osMutexRelease(logMutexHandle);
+	if (logHandle.logTask) xTaskNotifyGive(logHandle.logTask);
 }
 
 void output_log_buffer() {

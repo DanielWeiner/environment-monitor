@@ -64,7 +64,7 @@ static TokenMatcher readyTokenMatcher = TOKEN_MATCHER(READY_TOKEN);
 
 static char rxBuffer[256] = {0};
 static char txBuffer[256] = {0};
-static char rxDmaBuffer[64] = {0};
+static char rxDmaBuffer[128] = {0};
 
 AT_Handle esp8266ATHandle = {
 	.rxDmaBuffer = rxDmaBuffer,
@@ -269,9 +269,10 @@ void StartESP8266ATTask(void *argument) {
 
 	// trigger a reset on the ESP8266
 	HAL_GPIO_WritePin(ESP_RST_GPIO_Port, ESP_RST_Pin, GPIO_PIN_SET);
-
 	/* Infinite loop */
 	for (;;) {
+		// do nothing until notified on data/error
+		ulTaskNotifyTake(pdTRUE, osWaitForever);
 		at_consume_rx(&esp8266ATHandle);
 	}
 	/* USER CODE END StartESP8266ATTask */
@@ -287,6 +288,10 @@ typedef enum AT_GmrPhase {
 	AT_GMR_OK,
 	AT_GMR_ERROR
 } AT_GmrPhase;
+
+static void print_rx_char(char ch, void *) {
+	printf("%c", ch);
+}
 
 static void on_gmr_char(char ch, void *arg) {
 	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
@@ -318,11 +323,29 @@ static void on_gmr_output_done(void *arg) {
 static void on_gmr_ok(void *arg) {
 	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
 	*phase = AT_GMR_OK;
+	xTaskNotifyGive(esp8266DispatchHandle);
 }
 
 static void on_gmr_error(void *arg) {
 	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
 	*phase = AT_GMR_ERROR;
+	xTaskNotifyGive(esp8266DispatchHandle);
+}
+
+static void on_ok(void *arg) {
+	if (arg) {
+		bool *ok = (bool *)arg;
+		*ok = true;
+	}
+	xTaskNotifyGive(esp8266DispatchHandle);
+}
+
+static void on_error(void *arg) {
+	if (arg) {
+		bool *ok = (bool *)arg;
+		*ok = false;
+	}
+	xTaskNotifyGive(esp8266DispatchHandle);
 }
 
 static TokenMatcher okTokenMatcher = TOKEN_MATCHER(OK_TOKEN);
@@ -334,6 +357,7 @@ static const AT_TokenHandler gmrHandlers[] = {{&okTokenMatcher, on_gmr_ok},
 											  {&errorTokenMatcher, on_gmr_error},
 											  {&gmrTokenMatcher, on_gmr_token},
 											  {&doublCrlfTokenMatcher, on_gmr_output_done}};
+static const AT_TokenHandler defaultHandlers[] = {{&okTokenMatcher, on_ok}, {&errorTokenMatcher, on_error}};
 /**
  * @brief Function implementing the esp8266Dispatch thread.
  * @param argument: Not used
@@ -354,14 +378,21 @@ void StartESP8266Dispatch(void *argument) {
 	at_set_callback_data(&esp8266ATHandle, &gmrPhase);
 	at_on_rx_byte(&esp8266ATHandle, on_gmr_char);
 	at_set_tokens(&esp8266ATHandle, gmrHandlers);
-	at_send(&esp8266ATHandle, "AT+GMR\r\n", 8);
 
-	while (gmrPhase != AT_GMR_OK && gmrPhase != AT_GMR_ERROR) {
-		osDelay(1);
-	}
-
+	at_send(&esp8266ATHandle, "AT+GMR\r\n");
+	ulTaskNotifyTake(pdFALSE, osWaitForever);
+	at_set_tokens(&esp8266ATHandle, NULL);
 	printf("GMR Done\r\n");
-
+	at_on_rx_byte(&esp8266ATHandle, print_rx_char);
+	at_set_tokens(&esp8266ATHandle, defaultHandlers);
+	bool ok = false;
+	at_set_callback_data(&esp8266ATHandle, &ok);
+	at_send(&esp8266ATHandle, "AT+CWMODE=1\r\n");
+	ulTaskNotifyTake(pdFALSE, osWaitForever);
+	printf("Set mode to STA: %s\r\n", ok ? "OK" : "ERROR");
+	at_send(&esp8266ATHandle, "AT+CWLAP\r\n");
+	ulTaskNotifyTake(pdFALSE, osWaitForever);
+	printf("Scan done\r\n");
 	for (;;) {
 		osDelay(1);
 	}
@@ -378,9 +409,10 @@ void StartESP8266Dispatch(void *argument) {
 void StartLogTask(void *argument) {
 	/* USER CODE BEGIN StartLogTask */
 	/* Infinite loop */
+	log_init(logTaskHandle);
 	for (;;) {
+		ulTaskNotifyTake(pdTRUE, osWaitForever);
 		output_log_buffer();
-		vTaskDelay(0);
 	}
 	/* USER CODE END StartLogTask */
 }
@@ -388,12 +420,17 @@ void StartLogTask(void *argument) {
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
-	if (huart->Instance == USART1) {  // Adjust for your UART instance
+	if (huart->Instance == esp8266ATHandle.uart->Instance) {
 		at_buffer_rx(&esp8266ATHandle, huart, Size);
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		vTaskNotifyGiveFromISR(esp8266ATTaskHandle, &xHigherPriorityTaskWoken);
 	}
 }
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-	at_tx_complete(&esp8266ATHandle, huart);
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+	if (huart->Instance == esp8266ATHandle.uart->Instance) {
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+		vTaskNotifyGiveFromISR(esp8266ATTaskHandle, &xHigherPriorityTaskWoken);
+	}
 }
 /* USER CODE END Application */
