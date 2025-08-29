@@ -62,17 +62,14 @@ extern UART_HandleTypeDef huart1;
 
 static TokenMatcher readyTokenMatcher = TOKEN_MATCHER(READY_TOKEN);
 
-static char rxBuffer[256] = {0};
-static char txBuffer[256] = {0};
-static char rxDmaBuffer[128] = {0};
+static char rxBuffer[720] = {0};
+static char txBuffer[64] = {0};
 
 AT_Handle esp8266ATHandle = {
-	.rxDmaBuffer = rxDmaBuffer,
 	.rxBuffer = rxBuffer,
 	.txBuffer = txBuffer,
 	.rxBufferSize = sizeof(rxBuffer),
 	.txBufferSize = sizeof(txBuffer),
-	.rxDmaBufferSize = sizeof(rxDmaBuffer),
 };
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
@@ -121,7 +118,7 @@ const osThreadAttr_t logTask_attributes = {
 	.cb_size = sizeof(logTaskControlBlock),
 	.stack_mem = &logTaskBuffer[0],
 	.stack_size = sizeof(logTaskBuffer),
-	.priority = (osPriority_t)osPriorityLow,
+	.priority = (osPriority_t)osPriorityLow1,
 };
 /* Definitions for esp8266TxChunkMutex */
 osMutexId_t			esp8266TxChunkMutexHandle;
@@ -271,8 +268,6 @@ void StartESP8266ATTask(void *argument) {
 	HAL_GPIO_WritePin(ESP_RST_GPIO_Port, ESP_RST_Pin, GPIO_PIN_SET);
 	/* Infinite loop */
 	for (;;) {
-		// do nothing until notified on data/error
-		ulTaskNotifyTake(pdTRUE, osWaitForever);
 		at_consume_rx(&esp8266ATHandle);
 	}
 	/* USER CODE END StartESP8266ATTask */
@@ -290,7 +285,7 @@ typedef enum AT_GmrPhase {
 } AT_GmrPhase;
 
 static void print_rx_char(char ch, void *) {
-	printf("%c", ch);
+	HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
 }
 
 static void on_gmr_char(char ch, void *arg) {
@@ -303,7 +298,7 @@ static void on_gmr_char(char ch, void *arg) {
 			*phase = AT_GMR_WAITING_DONE;
 			// fallthrough to print the last character
 		case AT_GMR_PRINTING:
-			printf("%c", ch);
+			HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
 			break;
 		default:
 			break;
@@ -378,22 +373,19 @@ void StartESP8266Dispatch(void *argument) {
 	at_set_callback_data(&esp8266ATHandle, &gmrPhase);
 	at_on_rx_byte(&esp8266ATHandle, on_gmr_char);
 	at_set_tokens(&esp8266ATHandle, gmrHandlers);
-
 	at_send(&esp8266ATHandle, "AT+GMR\r\n");
 	ulTaskNotifyTake(pdFALSE, osWaitForever);
-	at_set_tokens(&esp8266ATHandle, NULL);
-	printf("GMR Done\r\n");
-	at_on_rx_byte(&esp8266ATHandle, print_rx_char);
+	at_on_rx_byte(&esp8266ATHandle, NULL);
 	at_set_tokens(&esp8266ATHandle, defaultHandlers);
 	bool ok = false;
 	at_set_callback_data(&esp8266ATHandle, &ok);
 	at_send(&esp8266ATHandle, "AT+CWMODE=1\r\n");
 	ulTaskNotifyTake(pdFALSE, osWaitForever);
-	printf("Set mode to STA: %s\r\n", ok ? "OK" : "ERROR");
-	at_send(&esp8266ATHandle, "AT+CWLAP\r\n");
-	ulTaskNotifyTake(pdFALSE, osWaitForever);
-	printf("Scan done\r\n");
+	at_on_rx_byte(&esp8266ATHandle, print_rx_char);
 	for (;;) {
+		at_send(&esp8266ATHandle, "AT+CWLAP\r\n");
+		ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(5000));
+		printf("Scan done\r\n");
 		osDelay(1);
 	}
 	/* USER CODE END StartESP8266Dispatch */
@@ -419,18 +411,8 @@ void StartLogTask(void *argument) {
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
-	if (huart->Instance == esp8266ATHandle.uart->Instance) {
-		at_buffer_rx(&esp8266ATHandle, huart, Size);
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		vTaskNotifyGiveFromISR(esp8266ATTaskHandle, &xHigherPriorityTaskWoken);
-	}
-}
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-	if (huart->Instance == esp8266ATHandle.uart->Instance) {
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		vTaskNotifyGiveFromISR(esp8266ATTaskHandle, &xHigherPriorityTaskWoken);
-	}
+	at_uart_error(&esp8266ATHandle, huart);
 }
 /* USER CODE END Application */

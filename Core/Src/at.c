@@ -5,6 +5,7 @@
 #include "cmsis_os.h"
 
 #define ALL_FLAGS 0xFFFFFFFF
+#define IDLE_TIMEOUT_TICKS 1
 
 extern osMutexId_t esp8266ATMutexHandle;
 extern osMutexId_t esp8266TxChunkMutexHandle;
@@ -13,41 +14,23 @@ extern osMutexId_t esp8266TxChunkMutexHandle;
  * @brief Recover from UART errors if present
  * @param handle AT handle
  */
-bool at_recover_from_errors(AT_Handle *handle) {
-	if (!handle) return true;
-
+void at_recover_from_errors(AT_Handle *handle) {
 	if (HAL_UART_GetError(handle->uart) != HAL_UART_ERROR_NONE) {
 		__HAL_UART_CLEAR_FLAG(handle->uart, ALL_FLAGS);
 		HAL_UART_AbortReceive(handle->uart);
-		HAL_UARTEx_ReceiveToIdle_DMA(handle->uart, (uint8_t *)handle->rxDmaBuffer, handle->rxDmaBufferSize);
-		__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT);
-		return true;
+		handle->readIndex = handle->rxBufferSize - __HAL_DMA_GET_COUNTER(handle->uart->hdmarx);
+		HAL_UART_Receive_DMA(handle->uart, (uint8_t *)handle->rxBuffer, handle->rxBufferSize);
+		__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT | DMA_IT_TC);
 	}
 
 	if (!((HAL_UART_GetState(handle->uart) == HAL_UART_STATE_BUSY_RX) ||
 		  (HAL_UART_GetState(handle->uart) == HAL_UART_STATE_BUSY_TX_RX))) {
 		__HAL_UART_CLEAR_FLAG(handle->uart, ALL_FLAGS);
 		HAL_UART_AbortReceive(handle->uart);
-		HAL_UARTEx_ReceiveToIdle_DMA(handle->uart, (uint8_t *)handle->rxDmaBuffer, handle->rxDmaBufferSize);
-		__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT);
-		return true;
+		handle->readIndex = handle->rxBufferSize - __HAL_DMA_GET_COUNTER(handle->uart->hdmarx);
+		HAL_UART_Receive_DMA(handle->uart, (uint8_t *)handle->rxBuffer, handle->rxBufferSize);
+		__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT | DMA_IT_TC);
 	}
-	return false;
-}
-
-/**
- * @brief Get the current RX buffer information, resetting the buffer status
- * @param handle AT handle
- * @param rxIndex Pointer to store the RX index
- * @param fullBuffer Pointer to store the full buffer status
- */
-static void get_rx_buffer_info(AT_Handle *handle, uint16_t *rxIndex, bool *fullBuffer) {
-	if (!handle || !rxIndex || !fullBuffer) return;
-	__disable_irq();
-	*rxIndex = handle->rxIndex;
-	*fullBuffer = handle->fullBuffer;
-	handle->fullBuffer = false;
-	__enable_irq();
 }
 
 /**
@@ -82,17 +65,15 @@ void at_init(AT_Handle *handle, UART_HandleTypeDef *uart) {
 	handle->onRxByte = NULL;
 	handle->tokenHandlers = NULL;
 	handle->numTokenHandlers = 0;
-	handle->rxIndex = 0;
 	handle->readIndex = 0;
-	memset(handle->rxDmaBuffer, 0, handle->rxDmaBufferSize);
 	memset((void *)handle->rxBuffer, 0, handle->rxBufferSize);
 	memset((void *)handle->txBuffer, 0, handle->txBufferSize);
 
 	__HAL_UART_CLEAR_FLAG(handle->uart, ALL_FLAGS);
-	if (HAL_UARTEx_ReceiveToIdle_DMA(handle->uart, (uint8_t *)handle->rxDmaBuffer, handle->rxDmaBufferSize) != HAL_OK) {
+	if (HAL_UART_Receive_DMA(handle->uart, (uint8_t *)handle->rxBuffer, handle->rxBufferSize) != HAL_OK) {
 		return;
 	}
-	__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT);
+	__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT | DMA_IT_TC);
 }
 
 /**
@@ -126,43 +107,9 @@ void at_set_tokens_n(AT_Handle *handle, uint16_t numTokens, const AT_TokenHandle
 	handle->numTokenHandlers = numTokens;
 }
 
-/**
- * @brief Advance the rx buffer index and copy data from the DMA buffer
- * @param handle AT handle
- * @param huart UART handle
- * @param len Length of the data
- * @return void
- */
-void at_buffer_rx(AT_Handle *handle, UART_HandleTypeDef *huart, uint16_t len) {
-	if (!handle || len == 0 || huart != handle->uart) return;
-
-	uint16_t rxIndex = handle->rxIndex;
-	uint16_t nextIndex = (rxIndex + len) % handle->rxBufferSize;
-
-	if (rxIndex < nextIndex) {
-		memcpy(&handle->rxBuffer[rxIndex], handle->rxDmaBuffer, len);
-	} else {
-		uint16_t firstPartLen = handle->rxBufferSize - rxIndex;
-		if (firstPartLen > 0) {
-			memcpy(&handle->rxBuffer[rxIndex], handle->rxDmaBuffer, firstPartLen);
-		}
-		memcpy(handle->rxBuffer, &handle->rxDmaBuffer[firstPartLen], len - firstPartLen);
-	}
-
-	handle->rxIndex = nextIndex;
-
-	if (handle->rxIndex == handle->readIndex && len > 0) {
-		handle->fullBuffer = true;
-	}
-
-	if (HAL_UARTEx_ReceiveToIdle_DMA(handle->uart, (uint8_t *)handle->rxDmaBuffer, handle->rxDmaBufferSize) == HAL_OK) {
-		__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT);
-	} else {
-		__HAL_UART_CLEAR_FLAG(handle->uart, ALL_FLAGS);
-		HAL_UART_AbortReceive(handle->uart);
-		HAL_UARTEx_ReceiveToIdle_DMA(handle->uart, (uint8_t *)handle->rxDmaBuffer, handle->rxDmaBufferSize);
-		__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT);
-	}
+void at_uart_error(AT_Handle *handle, UART_HandleTypeDef *huart) {
+	if (!handle || !huart || huart != handle->uart) return;
+	at_recover_from_errors(handle);
 }
 
 /**
@@ -193,39 +140,23 @@ void at_send_n(AT_Handle *handle, const char *str, uint16_t len) {
 }
 
 /**
- * @brief ISR routine for handling transmission complete interrupt
- * @param huart UART handle
- * @param handle AT handle
- * @return void
- */
-void at_tx_complete(AT_Handle *handle, UART_HandleTypeDef *huart) {
-	if (huart->Instance != handle->uart->Instance) return;
-
-	// release the TX chunk mutex so that more chunks can be sent
-	if (esp8266TxChunkMutexHandle) osMutexRelease(esp8266TxChunkMutexHandle);
-}
-
-/**
  * @brief Consume received bytes from the circular buffer
  * @param handle AT handle
  * @return void
  */
 void at_consume_rx(AT_Handle *handle) {
-	at_recover_from_errors(handle);
-
-	uint16_t rxIndex = 0;
-	bool	 fullBuffer = false;
-	get_rx_buffer_info(handle, &rxIndex, &fullBuffer);
-
-	while (handle->readIndex != rxIndex || fullBuffer) {
-		fullBuffer = false;
+	static uint32_t lastData = 0;
+	while (handle->readIndex != handle->rxBufferSize - __HAL_DMA_GET_COUNTER(handle->uart->hdmarx)) {
+		lastData = osKernelGetTickCount();
 		char ch = handle->rxBuffer[handle->readIndex++];
 		handle->readIndex %= handle->rxBufferSize;
-
 		process_rx_byte_handlers(handle, ch);
 
 		if (handle->onRxByte) {
 			handle->onRxByte(ch, handle->callbackArg);
 		}
 	}
+	if (osKernelGetTickCount() - lastData < IDLE_TIMEOUT_TICKS) return;
+	osDelay(1);
+	at_recover_from_errors(handle);
 }
