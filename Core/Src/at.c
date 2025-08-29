@@ -59,8 +59,8 @@ static void process_rx_byte_handlers(AT_Handle *handle, char byte) {
  * @param uart UART handle
  * @return void
  */
-void at_init(AT_Handle *handle, UART_HandleTypeDef *uart) {
-	if (!handle || !uart) return;
+bool at_init(AT_Handle *handle, UART_HandleTypeDef *uart) {
+	if (!handle || !uart) return false;
 	handle->uart = uart;
 	handle->onRxByte = NULL;
 	handle->tokenHandlers = NULL;
@@ -71,9 +71,10 @@ void at_init(AT_Handle *handle, UART_HandleTypeDef *uart) {
 
 	__HAL_UART_CLEAR_FLAG(handle->uart, ALL_FLAGS);
 	if (HAL_UART_Receive_DMA(handle->uart, (uint8_t *)handle->rxBuffer, handle->rxBufferSize) != HAL_OK) {
-		return;
+		return false;
 	}
 	__HAL_DMA_DISABLE_IT(handle->uart->hdmarx, DMA_IT_HT | DMA_IT_TC);
+	return true;
 }
 
 /**

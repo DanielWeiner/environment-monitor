@@ -63,7 +63,7 @@ extern UART_HandleTypeDef huart1;
 static TokenMatcher readyTokenMatcher = TOKEN_MATCHER(READY_TOKEN);
 
 static char rxBuffer[720] = {0};
-static char txBuffer[64] = {0};
+static char txBuffer[720] = {0};
 
 AT_Handle esp8266ATHandle = {
 	.rxBuffer = rxBuffer,
@@ -118,7 +118,7 @@ const osThreadAttr_t logTask_attributes = {
 	.cb_size = sizeof(logTaskControlBlock),
 	.stack_mem = &logTaskBuffer[0],
 	.stack_size = sizeof(logTaskBuffer),
-	.priority = (osPriority_t)osPriorityLow1,
+	.priority = (osPriority_t)osPriorityLow,
 };
 /* Definitions for esp8266TxChunkMutex */
 osMutexId_t			esp8266TxChunkMutexHandle;
@@ -261,7 +261,11 @@ void StartESP8266ATTask(void *argument) {
 	/* USER CODE BEGIN StartESP8266ATTask */
 
 	// Enable AT communication with the ESP8266 wifi module
-	at_init(&esp8266ATHandle, &huart1);
+	if (!at_init(&esp8266ATHandle, &huart1)) {
+		printf("Failed to initialize AT handler\r\n");
+		Error_Handler();
+	}
+
 	at_set_tokens(&esp8266ATHandle, readyHandlers);
 
 	// trigger a reset on the ESP8266
@@ -298,7 +302,7 @@ static void on_gmr_char(char ch, void *arg) {
 			*phase = AT_GMR_WAITING_DONE;
 			// fallthrough to print the last character
 		case AT_GMR_PRINTING:
-			HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+			printf("%c", ch);
 			break;
 		default:
 			break;
@@ -385,8 +389,8 @@ void StartESP8266Dispatch(void *argument) {
 	for (;;) {
 		at_send(&esp8266ATHandle, "AT+CWLAP\r\n");
 		ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(5000));
+		osDelay(10);
 		printf("Scan done\r\n");
-		osDelay(1);
 	}
 	/* USER CODE END StartESP8266Dispatch */
 }
@@ -403,7 +407,7 @@ void StartLogTask(void *argument) {
 	/* Infinite loop */
 	log_init(logTaskHandle);
 	for (;;) {
-		ulTaskNotifyTake(pdTRUE, osWaitForever);
+		ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10));
 		output_log_buffer();
 	}
 	/* USER CODE END StartLogTask */

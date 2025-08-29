@@ -6,7 +6,6 @@
 
 #include "cmsis_os.h"
 
-#define LOG_MAX_SIZE 256
 #define LOG_BUFFER_SIZE 512
 
 typedef struct Log_HandleTypeDef {

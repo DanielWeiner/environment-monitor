@@ -31,12 +31,11 @@ typedef struct AT_Handle {
 } AT_Handle;
 
 void at_recover_from_errors(AT_Handle *handle);
-void at_init(AT_Handle *handle, UART_HandleTypeDef *uart);
+bool at_init(AT_Handle *handle, UART_HandleTypeDef *uart);
 void at_on_rx_byte(AT_Handle *handle, void (*callback)(char, void *));
 void at_set_callback_data(AT_Handle *handle, void *arg);
 void at_set_tokens_n(AT_Handle *handle, uint16_t numTokens, const AT_TokenHandler *tokens);
 void at_uart_error(AT_Handle *handle, UART_HandleTypeDef *huart);
-void at_tx_complete(AT_Handle *handle, UART_HandleTypeDef *huart);
 void at_send_n(AT_Handle *handle, const char *str, uint16_t len);
 void at_consume_rx(AT_Handle *handle);
 #endif /* INC_AT_H_ */
