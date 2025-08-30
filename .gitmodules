@@ -1,3 +1,6 @@
 [submodule "Drivers/st7789"]
 	path = Drivers/st7789
 	url = https://github.com/libdriver/st7789
+[submodule "Drivers/lwesp"]
+	path = Drivers/lwesp
+	url = https://github.com/MaJerle/lwesp
