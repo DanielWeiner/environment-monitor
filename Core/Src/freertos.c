@@ -28,10 +28,10 @@
 /* USER CODE BEGIN Includes */
 #include <stdbool.h>
 
-#include "at.h"
 #include "constants.h"
 #include "lcd.h"
 #include "log.h"
+#include "lwesp/lwesp.h"
 #include "usart.h"
 /* USER CODE END Includes */
 
@@ -48,6 +48,7 @@ typedef StaticSemaphore_t osStaticMutexDef_t;
 #define ERROR_TOKEN (CRLF "ERROR" CRLF)
 #define AT_GMR_TOKEN ("AT+GMR" CRLF)
 #define READY_TOKEN (CRLF "ready" CRLF)
+#define CWLAP_PREFIX_TOKEN (CRLF "+CWLAP:(")
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,20 +58,9 @@ typedef StaticSemaphore_t osStaticMutexDef_t;
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-static bool				  esp8266Ready = false;
+// static bool				  esp8266Ready = false;
 extern UART_HandleTypeDef huart1;
 
-static TokenMatcher readyTokenMatcher = TOKEN_MATCHER(READY_TOKEN);
-
-static char rxBuffer[720] = {0};
-static char txBuffer[720] = {0};
-
-AT_Handle esp8266ATHandle = {
-	.rxBuffer = rxBuffer,
-	.txBuffer = txBuffer,
-	.rxBufferSize = sizeof(rxBuffer),
-	.txBufferSize = sizeof(txBuffer),
-};
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t		 defaultTaskHandle;
@@ -95,18 +85,6 @@ const osThreadAttr_t esp8266ATTask_attributes = {
 	.stack_mem = &esp8266ATTaskBuffer[0],
 	.stack_size = sizeof(esp8266ATTaskBuffer),
 	.priority = (osPriority_t)osPriorityLow,
-};
-/* Definitions for esp8266Dispatch */
-osThreadId_t		 esp8266DispatchHandle;
-uint32_t			 esp8266DispatchBuffer[256];
-osStaticThreadDef_t	 esp8266DispatchControlBlock;
-const osThreadAttr_t esp8266Dispatch_attributes = {
-	.name = "esp8266Dispatch",
-	.cb_mem = &esp8266DispatchControlBlock,
-	.cb_size = sizeof(esp8266DispatchControlBlock),
-	.stack_mem = &esp8266DispatchBuffer[0],
-	.stack_size = sizeof(esp8266DispatchBuffer),
-	.priority = (osPriority_t)osPriorityNormal,
 };
 /* Definitions for logTask */
 osThreadId_t		 logTaskHandle;
@@ -149,21 +127,10 @@ const osMutexAttr_t esp8266ATMutex_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-static void on_ready(void *);
-
-static const AT_TokenHandler readyHandlers[] = {
-	{&readyTokenMatcher, on_ready},
-};
-
-static void on_ready(void *) {
-	esp8266Ready = true;
-	at_clear_tokens(&esp8266ATHandle);
-}
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
 void StartESP8266ATTask(void *argument);
-void StartESP8266Dispatch(void *argument);
 void StartLogTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -211,9 +178,6 @@ void MX_FREERTOS_Init(void) {
 	/* creation of esp8266ATTask */
 	esp8266ATTaskHandle = osThreadNew(StartESP8266ATTask, NULL, &esp8266ATTask_attributes);
 
-	/* creation of esp8266Dispatch */
-	esp8266DispatchHandle = osThreadNew(StartESP8266Dispatch, NULL, &esp8266Dispatch_attributes);
-
 	/* creation of logTask */
 	logTaskHandle = osThreadNew(StartLogTask, NULL, &logTask_attributes);
 
@@ -227,7 +191,10 @@ void MX_FREERTOS_Init(void) {
 }
 
 /* USER CODE BEGIN Header_StartDefaultTask */
-
+lwespr_t lwesp_global_event_handler(struct lwesp_evt *evt) {
+	LWESP_UNUSED(evt);
+	return lwespOK;
+}
 /**
  * @brief  Function implementing the defaultTask thread.
  * @param  argument: Not used
@@ -239,7 +206,9 @@ void StartDefaultTask(void *argument) {
 	static char tickStr[10] = {0};
 
 	lcd_clear();
+	printf("HELLO" CRLF);
 	lcd_string(80, 160, "0", 1, 0xFFFF, ST7789_FONT_24);
+
 	uint32_t now = osKernelGetTickCount();
 	for (;;) {
 		lcd_fill_rect(80, 160, 220, 184, 0);
@@ -259,140 +228,24 @@ void StartDefaultTask(void *argument) {
 /* USER CODE END Header_StartESP8266ATTask */
 void StartESP8266ATTask(void *argument) {
 	/* USER CODE BEGIN StartESP8266ATTask */
+	lwespr_t resp = lwesp_init(lwesp_global_event_handler, 1);
+	printf("LWESP INIT: %d" CRLF, resp);
+	static lwesp_ap_t accessPoints[50] = {0};
 
-	// Enable AT communication with the ESP8266 wifi module
-	if (!at_init(&esp8266ATHandle, &huart1)) {
-		printf("Failed to initialize AT handler\r\n");
-		Error_Handler();
-	}
-
-	at_set_tokens(&esp8266ATHandle, readyHandlers);
-
-	// trigger a reset on the ESP8266
-	HAL_GPIO_WritePin(ESP_RST_GPIO_Port, ESP_RST_Pin, GPIO_PIN_SET);
 	/* Infinite loop */
 	for (;;) {
-		at_consume_rx(&esp8266ATHandle);
-	}
-	/* USER CODE END StartESP8266ATTask */
-}
-
-/* USER CODE BEGIN Header_StartESP8266Dispatch */
-typedef enum AT_GmrPhase {
-	AT_GMR_INIT,
-	AT_GMR_ACKNOWLEDGED,
-	AT_GMR_PRINTING,
-	AT_GMR_PRINTING_END,
-	AT_GMR_WAITING_DONE,
-	AT_GMR_OK,
-	AT_GMR_ERROR
-} AT_GmrPhase;
-
-static void print_rx_char(char ch, void *) {
-	HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-}
-
-static void on_gmr_char(char ch, void *arg) {
-	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
-	switch (*phase) {
-		case AT_GMR_ACKNOWLEDGED:
-			*phase = AT_GMR_PRINTING;
-			break;
-		case AT_GMR_PRINTING_END:
-			*phase = AT_GMR_WAITING_DONE;
-			// fallthrough to print the last character
-		case AT_GMR_PRINTING:
-			printf("%c", ch);
-			break;
-		default:
-			break;
-	}
-}
-
-static void on_gmr_token(void *arg) {
-	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
-	*phase = AT_GMR_ACKNOWLEDGED;
-}
-
-static void on_gmr_output_done(void *arg) {
-	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
-	*phase = AT_GMR_PRINTING_END;
-}
-
-static void on_gmr_ok(void *arg) {
-	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
-	*phase = AT_GMR_OK;
-	xTaskNotifyGive(esp8266DispatchHandle);
-}
-
-static void on_gmr_error(void *arg) {
-	AT_GmrPhase *phase = (AT_GmrPhase *)arg;
-	*phase = AT_GMR_ERROR;
-	xTaskNotifyGive(esp8266DispatchHandle);
-}
-
-static void on_ok(void *arg) {
-	if (arg) {
-		bool *ok = (bool *)arg;
-		*ok = true;
-	}
-	xTaskNotifyGive(esp8266DispatchHandle);
-}
-
-static void on_error(void *arg) {
-	if (arg) {
-		bool *ok = (bool *)arg;
-		*ok = false;
-	}
-	xTaskNotifyGive(esp8266DispatchHandle);
-}
-
-static TokenMatcher okTokenMatcher = TOKEN_MATCHER(OK_TOKEN);
-static TokenMatcher errorTokenMatcher = TOKEN_MATCHER(ERROR_TOKEN);
-static TokenMatcher gmrTokenMatcher = TOKEN_MATCHER(AT_GMR_TOKEN);
-static TokenMatcher doublCrlfTokenMatcher = TOKEN_MATCHER(DOUBLE_CRLF);
-
-static const AT_TokenHandler gmrHandlers[] = {{&okTokenMatcher, on_gmr_ok},
-											  {&errorTokenMatcher, on_gmr_error},
-											  {&gmrTokenMatcher, on_gmr_token},
-											  {&doublCrlfTokenMatcher, on_gmr_output_done}};
-static const AT_TokenHandler defaultHandlers[] = {{&okTokenMatcher, on_ok}, {&errorTokenMatcher, on_error}};
-/**
- * @brief Function implementing the esp8266Dispatch thread.
- * @param argument: Not used
- * @retval None
- */
-/* USER CODE END Header_StartESP8266Dispatch */
-void StartESP8266Dispatch(void *argument) {
-	/* USER CODE BEGIN StartESP8266Dispatch */
-	/* Infinite loop */
-
-	while (!esp8266Ready) {
+		memset(accessPoints, 0, sizeof(accessPoints));
+		lwesp_sta_list_ap(NULL, accessPoints, 50, NULL, NULL, NULL, 1);
+		for (int i = 0; i < 50; i++) {
+			if (accessPoints[i].ssid[0] == 0) {
+				continue;
+			}
+			printf("%s" CRLF, accessPoints[i].ssid);
+		}
+		printf(CRLF);
 		osDelay(1);
 	}
-
-	printf("ESP8266 is ready\r\n");
-	printf("ESP8266 firmware info:\r\n");
-	AT_GmrPhase gmrPhase = AT_GMR_INIT;
-	at_set_callback_data(&esp8266ATHandle, &gmrPhase);
-	at_on_rx_byte(&esp8266ATHandle, on_gmr_char);
-	at_set_tokens(&esp8266ATHandle, gmrHandlers);
-	at_send(&esp8266ATHandle, "AT+GMR\r\n");
-	ulTaskNotifyTake(pdFALSE, osWaitForever);
-	at_on_rx_byte(&esp8266ATHandle, NULL);
-	at_set_tokens(&esp8266ATHandle, defaultHandlers);
-	bool ok = false;
-	at_set_callback_data(&esp8266ATHandle, &ok);
-	at_send(&esp8266ATHandle, "AT+CWMODE=1\r\n");
-	ulTaskNotifyTake(pdFALSE, osWaitForever);
-	at_on_rx_byte(&esp8266ATHandle, print_rx_char);
-	for (;;) {
-		at_send(&esp8266ATHandle, "AT+CWLAP\r\n");
-		ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(5000));
-		osDelay(10);
-		printf("Scan done\r\n");
-	}
-	/* USER CODE END StartESP8266Dispatch */
+	/* USER CODE END StartESP8266ATTask */
 }
 
 /* USER CODE BEGIN Header_StartLogTask */
@@ -416,7 +269,4 @@ void StartLogTask(void *argument) {
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-	at_uart_error(&esp8266ATHandle, huart);
-}
 /* USER CODE END Application */

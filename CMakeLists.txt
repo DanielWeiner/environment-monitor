@@ -12,6 +12,14 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+set(LWESP_CFG_INPUT_USE_PROCESS 1)
+set(LWESP_SYS_PORT freertos)
+set(LWESP_OPTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/Core/Inc/lwesp_opts.h)
+set(LWESP_COMPILE_OPTIONS 
+	-I${CMAKE_CURRENT_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/include 
+	-I${CMAKE_CURRENT_SOURCE_DIR}/Core/Inc 
+	-I${CMAKE_CURRENT_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F)
+include(${CMAKE_CURRENT_SOURCE_DIR}/Drivers/lwesp/lwesp/library.cmake)
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
@@ -44,26 +52,32 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user sources here
+    ${lwesp_core_SRCS}
+	${lwesp_api_SRCS}
 	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/src/driver_st7789.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/example/driver_st7789_basic.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/st7789_interface.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/log.c
-	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/at.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/token.c
+	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/lwesp_ll_stml432kc_nucleo.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+	${lwesp_include_DIRS}
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/lwesp/lwesp/src/include/system/port/cmsis_os
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/lwesp/lwesp/src/include
 	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/src
 	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/example
-	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/interface
+	${CMAKE_CURRENT_SOURCE_DIR}/Drivers/st7789/interface	
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
+	USE_FULL_LL_DRIVER
+	LWESP_CFG_INPUT_USE_PROCESS
 )
 
 # Remove wrong libob.a library dependency when using cpp files

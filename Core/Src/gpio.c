@@ -53,7 +53,10 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, LCD_DCX_Pin|LCD_CSX_Pin|LCD_RST_Pin|LCD_BL_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LD3_Pin|ESP_RST_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(ESP_RST_GPIO_Port, ESP_RST_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : LCD_DCX_Pin LCD_CSX_Pin */
   GPIO_InitStruct.Pin = LCD_DCX_Pin|LCD_CSX_Pin;

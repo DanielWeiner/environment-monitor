@@ -55,6 +55,6 @@ void output_log_buffer() {
 }
 
 int __io_putchar(int ch) {
-	log_printf("%c", ch);
+	HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
 	return ch;
 }

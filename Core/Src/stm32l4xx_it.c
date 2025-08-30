@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file    stm32l4xx_it.c
-  * @brief   Interrupt Service Routines.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file    stm32l4xx_it.c
+ * @brief   Interrupt Service Routines.
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2025 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
@@ -22,6 +22,20 @@
 #include "stm32l4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "lwesp_opts.h"
+/**/
+#include "lwesp/lwesp.h"
+/**/
+#include "cmsis_os.h"
+#include "lwesp/lwesp_input.h"
+#include "lwesp/lwesp_mem.h"
+#include "stm32l4xx_ll_bus.h"
+#include "stm32l4xx_ll_dma.h"
+#include "stm32l4xx_ll_gpio.h"
+#include "stm32l4xx_ll_pwr.h"
+#include "stm32l4xx_ll_rcc.h"
+#include "stm32l4xx_ll_usart.h"
+#include "system/lwesp_ll.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -55,12 +69,10 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern DMA_HandleTypeDef hdma_usart1_rx;
-extern UART_HandleTypeDef huart1;
 extern TIM_HandleTypeDef htim6;
 
 /* USER CODE BEGIN EV */
-
+extern osMessageQueueId_t usart_ll_mbox_id;
 /* USER CODE END EV */
 
 /******************************************************************************/
@@ -75,9 +87,8 @@ void NMI_Handler(void)
 
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-   while (1)
-  {
-  }
+	while (1) {
+	}
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
@@ -169,9 +180,17 @@ void USART1_IRQHandler(void)
   /* USER CODE BEGIN USART1_IRQn 0 */
 
   /* USER CODE END USART1_IRQn 0 */
-  HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
+	LL_USART_ClearFlag_IDLE(LWESP_USART);
+	LL_USART_ClearFlag_PE(LWESP_USART);
+	LL_USART_ClearFlag_FE(LWESP_USART);
+	LL_USART_ClearFlag_ORE(LWESP_USART);
+	LL_USART_ClearFlag_NE(LWESP_USART);
 
+	if (usart_ll_mbox_id != NULL) {
+		void* d = (void*)1;
+		osMessageQueuePut(usart_ll_mbox_id, &d, 0, 0);
+	}
   /* USER CODE END USART1_IRQn 1 */
 }
 
@@ -197,9 +216,14 @@ void DMA2_Channel7_IRQHandler(void)
   /* USER CODE BEGIN DMA2_Channel7_IRQn 0 */
 
   /* USER CODE END DMA2_Channel7_IRQn 0 */
-  HAL_DMA_IRQHandler(&hdma_usart1_rx);
   /* USER CODE BEGIN DMA2_Channel7_IRQn 1 */
+	LWESP_USART_DMA_RX_CLEAR_TC;
+	LWESP_USART_DMA_RX_CLEAR_HT;
 
+	if (usart_ll_mbox_id != NULL) {
+		void* d = (void*)1;
+		osMessageQueuePut(usart_ll_mbox_id, &d, 0, 0);
+	}
   /* USER CODE END DMA2_Channel7_IRQn 1 */
 }
 

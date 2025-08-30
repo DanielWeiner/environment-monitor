@@ -29,6 +29,18 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32l4xx_hal.h"
 
+#include "stm32l4xx_ll_dma.h"
+#include "stm32l4xx_ll_usart.h"
+#include "stm32l4xx_ll_rcc.h"
+#include "stm32l4xx_ll_bus.h"
+#include "stm32l4xx_ll_cortex.h"
+#include "stm32l4xx_ll_system.h"
+#include "stm32l4xx_ll_utils.h"
+#include "stm32l4xx_ll_pwr.h"
+#include "stm32l4xx_ll_gpio.h"
+
+#include "stm32l4xx_ll_exti.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -61,8 +73,6 @@ void Error_Handler(void);
 #define MCO_GPIO_Port GPIOA
 #define LCD_CLK_Pin GPIO_PIN_1
 #define LCD_CLK_GPIO_Port GPIOA
-#define VCP_TX_Pin GPIO_PIN_2
-#define VCP_TX_GPIO_Port GPIOA
 #define LCD_DCX_Pin GPIO_PIN_3
 #define LCD_DCX_GPIO_Port GPIOA
 #define LCD_CSX_Pin GPIO_PIN_4
@@ -77,8 +87,6 @@ void Error_Handler(void);
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14
 #define SWCLK_GPIO_Port GPIOA
-#define VCP_RX_Pin GPIO_PIN_15
-#define VCP_RX_GPIO_Port GPIOA
 #define LD3_Pin GPIO_PIN_3
 #define LD3_GPIO_Port GPIOB
 #define ESP_RST_Pin GPIO_PIN_5
