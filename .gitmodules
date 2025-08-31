@@ -4,3 +4,4 @@
 [submodule "Drivers/lwesp"]
 	path = Drivers/lwesp
 	url = https://github.com/MaJerle/lwesp
+	branch = develop
