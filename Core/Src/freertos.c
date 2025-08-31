@@ -47,6 +47,9 @@ typedef StaticSemaphore_t osStaticMutexDef_t;
 /* USER CODE BEGIN PD */
 #define CONN_HOST "httpbin.org"
 #define CONN_PORT 443
+#define REQUEST_FREQUENCY 5000
+#define LOG_OUTPUT_DELAY 10
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -282,6 +285,32 @@ static const uint8_t req_data[] =
 
 	"Connection: close" DOUBLE_CRLF;
 
+static void make_request() {
+	lwespr_t	 resp;
+	lwesp_conn_p conn;
+	if ((resp = lwesp_conn_start(&conn, LWESP_CONN_TYPE_SSL, CONN_HOST, CONN_PORT, xTaskGetCurrentTaskHandle(),
+								 on_connection_event, 0)) != lwespOK) {
+		printf("Cannot start connection to " CONN_HOST ": %s" CRLF, response_str(resp));
+		return;
+	}
+
+	printf("Connection to " CONN_HOST " started..." CRLF);
+	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+	if (!lwesp_conn_is_active(conn)) {
+		printf("Connection to " CONN_HOST " failed" CRLF);
+		return;
+	}
+
+	printf("Connection to " CONN_HOST " established" CRLF);
+	size_t sent = 0;
+	lwesp_conn_send(conn, req_data, sizeof(req_data) - 1, &sent, 0);
+	printf("%s" CRLF, req_data);
+
+	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+	printf("Connection closed" CRLF);
+}
+
 /**
  * @brief Function implementing the esp8266ATTask thread.
  * @param argument: Not used
@@ -331,33 +360,16 @@ void StartESP8266ATTask(void *argument) {
 
 		if (resp != lwespOK) {
 			printf("Failed to connect to network: %s" CRLF, response_str(resp));
-		} else {
-			printf("Connected to %s" CRLF, MY_SSID);
+			continue;
 		}
+		printf("Connected to %s" CRLF, MY_SSID);
 	} while (resp != lwespOK);
 
 	/* Infinite loop */
-	TickType_t				now = xTaskGetTickCount();
-	static const TickType_t delay = 5000;
+	TickType_t now = xTaskGetTickCount();
 	for (;;) {
-		lwesp_conn_p conn;
-		if ((resp = lwesp_conn_start(&conn, LWESP_CONN_TYPE_SSL, CONN_HOST, CONN_PORT, xTaskGetCurrentTaskHandle(),
-									 on_connection_event, 0)) == lwespOK) {
-			printf("Connection to " CONN_HOST " started...\r\n");
-			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-			if (lwesp_conn_is_active(conn)) {
-				printf("Connection to " CONN_HOST " established!\r\n");
-				size_t sent = 0;
-				lwesp_conn_send(conn, req_data, sizeof(req_data) - 1, &sent, 0);
-				ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-				printf("Connection complete" CRLF);
-			} else {
-				printf("Connection to " CONN_HOST " failed!\r\n");
-			}
-		} else {
-			printf("Cannot start connection to " CONN_HOST ": %s\r\n", response_str(resp));
-		}
-		vTaskDelayUntil(&now, delay);
+		make_request();
+		vTaskDelayUntil(&now, REQUEST_FREQUENCY);
 	}
 	/* USER CODE END StartESP8266ATTask */
 }
@@ -371,9 +383,10 @@ void StartESP8266ATTask(void *argument) {
 /* USER CODE END Header_StartLogTask */
 void StartLogTask(void *argument) {
 	/* USER CODE BEGIN StartLogTask */
+
 	/* Infinite loop */
 	for (;;) {
-		output_log_buffer();
+		output_log_buffer(LOG_OUTPUT_DELAY);
 	}
 	/* USER CODE END StartLogTask */
 }

@@ -13,8 +13,6 @@ typedef struct Log_HandleTypeDef {
 	uint16_t writeIndex;
 } Log_HandleTypeDef;
 
-void log_printf_va_list(const char *fmt, va_list args) __attribute__((format(printf, 1, 0)));
-void log_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-void output_log_buffer(void);
+void output_log_buffer(uint32_t timeout);
 
 #endif /* INC_LOG_H_ */

@@ -67,7 +67,7 @@ void st7789_interface_delay_ms(uint32_t ms) {
 void st7789_interface_debug_print(const char *const fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
-	log_printf_va_list(fmt, args);
+	vprintf(fmt, args);
 	va_end(args);
 }
 
