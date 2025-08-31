@@ -98,14 +98,6 @@ const osThreadAttr_t logTask_attributes = {
 	.stack_size = sizeof(logTaskBuffer),
 	.priority = (osPriority_t)osPriorityLow,
 };
-/* Definitions for esp8266TxChunkMutex */
-osMutexId_t			esp8266TxChunkMutexHandle;
-osStaticMutexDef_t	esp8266TxChunkMutexControlBlock;
-const osMutexAttr_t esp8266TxChunkMutex_attributes = {
-	.name = "esp8266TxChunkMutex",
-	.cb_mem = &esp8266TxChunkMutexControlBlock,
-	.cb_size = sizeof(esp8266TxChunkMutexControlBlock),
-};
 /* Definitions for logMutex */
 osMutexId_t			logMutexHandle;
 osStaticMutexDef_t	logMutexControlBlock;
@@ -114,15 +106,6 @@ const osMutexAttr_t logMutex_attributes = {
 	.attr_bits = osMutexRecursive,
 	.cb_mem = &logMutexControlBlock,
 	.cb_size = sizeof(logMutexControlBlock),
-};
-/* Definitions for esp8266ATMutex */
-osMutexId_t			esp8266ATMutexHandle;
-osStaticMutexDef_t	esp8266ATMutexControlBlock;
-const osMutexAttr_t esp8266ATMutex_attributes = {
-	.name = "esp8266ATMutex",
-	.attr_bits = osMutexRecursive,
-	.cb_mem = &esp8266ATMutexControlBlock,
-	.cb_size = sizeof(esp8266ATMutexControlBlock),
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -144,16 +127,10 @@ void MX_FREERTOS_Init(void) {
 	/* USER CODE BEGIN Init */
 	lcd_init();
 	/* USER CODE END Init */
-	/* Create the mutex(es) */
-	/* creation of esp8266TxChunkMutex */
-	esp8266TxChunkMutexHandle = osMutexNew(&esp8266TxChunkMutex_attributes);
 
 	/* Create the recursive mutex(es) */
 	/* creation of logMutex */
 	logMutexHandle = osMutexNew(&logMutex_attributes);
-
-	/* creation of esp8266ATMutex */
-	esp8266ATMutexHandle = osMutexNew(&esp8266ATMutex_attributes);
 
 	/* USER CODE BEGIN RTOS_MUTEX */
 	/* add mutexes, ... */
@@ -206,9 +183,7 @@ void StartDefaultTask(void *argument) {
 	static char tickStr[10] = {0};
 
 	lcd_clear();
-	printf("HELLO" CRLF);
 	lcd_string(80, 160, "0", 1, 0xFFFF, ST7789_FONT_24);
-
 	uint32_t now = osKernelGetTickCount();
 	for (;;) {
 		lcd_fill_rect(80, 160, 220, 184, 0);
@@ -228,21 +203,60 @@ void StartDefaultTask(void *argument) {
 /* USER CODE END Header_StartESP8266ATTask */
 void StartESP8266ATTask(void *argument) {
 	/* USER CODE BEGIN StartESP8266ATTask */
-	lwespr_t resp = lwesp_init(lwesp_global_event_handler, 1);
-	printf("LWESP INIT: %d" CRLF, resp);
-	static lwesp_ap_t accessPoints[50] = {0};
+	printf("initializing ESP8266" CRLF);
 
-	/* Infinite loop */
-	for (;;) {
+	lwespr_t resp;
+	while (resp = lwesp_init(lwesp_global_event_handler, 1), resp != lwespOK) {
+		printf("initialization failed: ");
+		switch (resp) {
+			case lwespERRMEM:
+				printf("out of memory" CRLF);
+				break;
+			case lwespTIMEOUT:
+				printf("timeout" CRLF);
+				break;
+			case lwespERRPAR:
+				printf("wrong parameters" CRLF);
+				break;
+			case lwespERR:
+			default:
+				printf("unknown error" CRLF);
+				break;
+		}
+	}
+	printf("initialized ESP8266" CRLF);
+	static lwesp_ap_t  accessPoints[40] = {0};
+	static lwesp_mac_t myMacAddress = {0};
+	bool			   foundMySsid = false;
+
+	do {
 		memset(accessPoints, 0, sizeof(accessPoints));
-		lwesp_sta_list_ap(NULL, accessPoints, 50, NULL, NULL, NULL, 1);
-		for (int i = 0; i < 50; i++) {
+		size_t found = 0;
+		printf("Scanning for networks..." CRLF);
+		lwesp_sta_list_ap(NULL, accessPoints, sizeof(accessPoints) / sizeof(lwesp_ap_t), &found, NULL, NULL, 1);
+		for (int i = 0; i < found; i++) {
 			if (accessPoints[i].ssid[0] == 0) {
 				continue;
 			}
-			printf("%s" CRLF, accessPoints[i].ssid);
+			if (strlen(accessPoints[i].ssid) == strlen(MY_SSID) && strcmp(accessPoints[i].ssid, MY_SSID) == 0) {
+				memcpy(myMacAddress.mac, accessPoints[i].mac.mac, sizeof(myMacAddress.mac));
+				foundMySsid = true;
+				break;
+			}
 		}
-		printf(CRLF);
+	} while (!foundMySsid);
+
+	printf("Found network: %s (%02x:%02x:%02x:%02x:%02x:%02x)" CRLF, MY_SSID, myMacAddress.mac[0], myMacAddress.mac[1],
+		   myMacAddress.mac[2], myMacAddress.mac[3], myMacAddress.mac[4], myMacAddress.mac[5]);
+	resp = lwesp_sta_join(MY_SSID, MY_PASSWORD, &myMacAddress, NULL, NULL, 1);
+	if (resp != lwespOK) {
+		printf("Failed to connect to network: %d" CRLF, resp);
+	} else {
+		printf("Connected to %s" CRLF, MY_SSID);
+	}
+
+	/* Infinite loop */
+	for (;;) {
 		osDelay(1);
 	}
 	/* USER CODE END StartESP8266ATTask */
