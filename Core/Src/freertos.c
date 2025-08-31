@@ -32,6 +32,7 @@
 #include "lcd.h"
 #include "log.h"
 #include "lwesp/lwesp.h"
+#include "lwesp/lwesp_conn.h"
 #include "usart.h"
 /* USER CODE END Includes */
 
@@ -44,11 +45,8 @@ typedef StaticSemaphore_t osStaticMutexDef_t;
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define OK_TOKEN (CRLF "OK" CRLF)
-#define ERROR_TOKEN (CRLF "ERROR" CRLF)
-#define AT_GMR_TOKEN ("AT+GMR" CRLF)
-#define READY_TOKEN (CRLF "ready" CRLF)
-#define CWLAP_PREFIX_TOKEN (CRLF "+CWLAP:(")
+#define CONN_HOST "httpbin.org"
+#define CONN_PORT 443
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -64,7 +62,7 @@ extern UART_HandleTypeDef huart1;
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t		 defaultTaskHandle;
-uint32_t			 defaultTaskBuffer[256];
+uint32_t			 defaultTaskBuffer[128];
 osStaticThreadDef_t	 defaultTaskControlBlock;
 const osThreadAttr_t defaultTask_attributes = {
 	.name = "defaultTask",
@@ -168,10 +166,7 @@ void MX_FREERTOS_Init(void) {
 }
 
 /* USER CODE BEGIN Header_StartDefaultTask */
-lwespr_t lwesp_global_event_handler(struct lwesp_evt *evt) {
-	LWESP_UNUSED(evt);
-	return lwespOK;
-}
+
 /**
  * @brief  Function implementing the defaultTask thread.
  * @param  argument: Not used
@@ -195,6 +190,97 @@ void StartDefaultTask(void *argument) {
 }
 
 /* USER CODE BEGIN Header_StartESP8266ATTask */
+static char *response_str(lwespr_t res) {
+	switch (res) {
+		case lwespOK:
+			return "OK";
+		case lwespOKIGNOREMORE:
+			return "OKIGNOREMORE";
+		case lwespERR:
+			return "ERR";
+		case lwespERRPAR:
+			return "ERRPAR";
+		case lwespERRMEM:
+			return "ERRMEM";
+		case lwespTIMEOUT:
+			return "TIMEOUT";
+		case lwespCONT:
+			return "CONT";
+		case lwespCLOSED:
+			return "CLOSED";
+		case lwespINPROG:
+			return "INPROG";
+		case lwespERRNOIP:
+			return "ERRNOIP";
+		case lwespERRNOFREECONN:
+			return "ERRNOFREECONN";
+		case lwespERRCONNTIMEOUT:
+			return "ERRCONNTIMEOUT";
+		case lwespERRPASS:
+			return "ERRPASS";
+		case lwespERRNOAP:
+			return "ERRNOAP";
+		case lwespERRCONNFAIL:
+			return "ERRCONNFAIL";
+		case lwespERRWIFINOTCONNECTED:
+			return "ERRWIFINOTCONNECTED";
+		case lwespERRNODEVICE:
+			return "ERRNODEVICE";
+		case lwespERRBLOCKING:
+			return "ERRBLOCKING";
+		case lwespERRCMDNOTSUPPORTED:
+			return "ERRCMDNOTSUPPORTED";
+		default:
+			return "UNKNOWN";
+	}
+}
+
+static lwespr_t lwesp_global_event_handler(struct lwesp_evt *evt) {
+	LWESP_UNUSED(evt);
+	return lwespOK;
+}
+static lwespr_t on_connection_event(struct lwesp_evt *evt) {
+	switch (evt->type) {
+		case LWESP_EVT_CONN_ACTIVE: {
+			lwesp_conn_p conn = lwesp_evt_conn_active_get_conn(evt);
+			xTaskNotifyGive((TaskHandle_t)lwesp_conn_get_arg(conn));
+			break;
+		}
+		case LWESP_EVT_CONN_CLOSE: {
+			lwesp_conn_p conn = lwesp_evt_conn_close_get_conn(evt);
+			xTaskNotifyGive((TaskHandle_t)lwesp_conn_get_arg(conn));
+			break;
+		}
+		case LWESP_EVT_CONN_ERROR:
+			printf("Connection error: %s" CRLF, response_str(lwesp_evt_conn_error_get_error(evt)));
+			xTaskNotifyGive((TaskHandle_t)lwesp_evt_conn_error_get_arg(evt));
+			break;
+		case LWESP_EVT_CONN_RECV: {
+			const void	*data = NULL;
+			size_t		 pos = 0;
+			size_t		 len = 0;
+			lwesp_pbuf_p buf = lwesp_evt_conn_recv_get_buff(evt);
+			while ((data = lwesp_pbuf_get_linear_addr(buf, pos, &len)) != NULL) {
+				printf("%.*s", (int)len, (const char *)data);
+				pos += len;
+			}
+			break;
+		}
+		default:
+			break;
+	}
+	return lwespOK;
+}
+
+static const uint8_t req_data[] =
+	""
+
+	"GET /get HTTP/1.1" CRLF
+
+	"Host: " CONN_HOST CRLF
+
+	"Connection: close" DOUBLE_CRLF;
+
 /**
  * @brief Function implementing the esp8266ATTask thread.
  * @param argument: Not used
@@ -207,24 +293,11 @@ void StartESP8266ATTask(void *argument) {
 
 	lwespr_t resp;
 	while (resp = lwesp_init(lwesp_global_event_handler, 1), resp != lwespOK) {
-		printf("initialization failed: ");
-		switch (resp) {
-			case lwespERRMEM:
-				printf("out of memory" CRLF);
-				break;
-			case lwespTIMEOUT:
-				printf("timeout" CRLF);
-				break;
-			case lwespERRPAR:
-				printf("wrong parameters" CRLF);
-				break;
-			case lwespERR:
-			default:
-				printf("unknown error" CRLF);
-				break;
-		}
+		printf("initialization failed: %s" CRLF, response_str(resp));
+		osDelay(500);
 	}
 	printf("initialized ESP8266" CRLF);
+
 	static lwesp_ap_t  accessPoints[40] = {0};
 	static lwesp_mac_t myMacAddress = {0};
 	bool			   foundMySsid = false;
@@ -233,7 +306,9 @@ void StartESP8266ATTask(void *argument) {
 		memset(accessPoints, 0, sizeof(accessPoints));
 		size_t found = 0;
 		printf("Scanning for networks..." CRLF);
+
 		lwesp_sta_list_ap(NULL, accessPoints, sizeof(accessPoints) / sizeof(lwesp_ap_t), &found, NULL, NULL, 1);
+
 		for (int i = 0; i < found; i++) {
 			if (accessPoints[i].ssid[0] == 0) {
 				continue;
@@ -248,16 +323,38 @@ void StartESP8266ATTask(void *argument) {
 
 	printf("Found network: %s (%02x:%02x:%02x:%02x:%02x:%02x)" CRLF, MY_SSID, myMacAddress.mac[0], myMacAddress.mac[1],
 		   myMacAddress.mac[2], myMacAddress.mac[3], myMacAddress.mac[4], myMacAddress.mac[5]);
-	resp = lwesp_sta_join(MY_SSID, MY_PASSWORD, &myMacAddress, NULL, NULL, 1);
-	if (resp != lwespOK) {
-		printf("Failed to connect to network: %d" CRLF, resp);
-	} else {
-		printf("Connected to %s" CRLF, MY_SSID);
-	}
+	do {
+		printf("Connecting to %s..." CRLF, MY_SSID);
+
+		resp = lwesp_sta_join(MY_SSID, MY_PASSWORD, &myMacAddress, NULL, NULL, 1);
+
+		if (resp != lwespOK) {
+			printf("Failed to connect to network: %s" CRLF, response_str(resp));
+		} else {
+			printf("Connected to %s" CRLF, MY_SSID);
+		}
+	} while (resp != lwespOK);
 
 	/* Infinite loop */
 	for (;;) {
-		osDelay(1);
+		lwesp_conn_p conn;
+		if ((resp = lwesp_conn_start(&conn, LWESP_CONN_TYPE_SSL, CONN_HOST, CONN_PORT, xTaskGetCurrentTaskHandle(),
+									 on_connection_event, 0)) == lwespOK) {
+			printf("Connection to " CONN_HOST " started...\r\n");
+			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+			if (lwesp_conn_is_active(conn)) {
+				printf("Connection to " CONN_HOST " established!\r\n");
+				size_t sent = 0;
+				lwesp_conn_send(conn, req_data, sizeof(req_data) - 1, &sent, 0);
+				ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+				printf("Connection complete" CRLF);
+			} else {
+				printf("Connection to " CONN_HOST " failed!\r\n");
+			}
+		} else {
+			printf("Cannot start connection to " CONN_HOST ": %s\r\n", response_str(resp));
+		}
+		osDelay(2000);
 	}
 	/* USER CODE END StartESP8266ATTask */
 }
@@ -272,9 +369,7 @@ void StartESP8266ATTask(void *argument) {
 void StartLogTask(void *argument) {
 	/* USER CODE BEGIN StartLogTask */
 	/* Infinite loop */
-	log_init(logTaskHandle);
 	for (;;) {
-		ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10));
 		output_log_buffer();
 	}
 	/* USER CODE END StartLogTask */

@@ -76,7 +76,6 @@
 
 #define LWESP_USART_DMA_RX_BUFF_SIZE 0x200
 #define LWESP_MEM_SIZE 0x1000
-#define LWESP_CFG_DBG_OUT(fmt, ...) printf(fmt, ##__VA_ARGS__)
 #define LWESP_CFG_MAX_SSID_LENGTH 33
 
 #endif /* LWESP_OPTS_HDR_H */

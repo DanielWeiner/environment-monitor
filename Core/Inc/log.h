@@ -9,13 +9,10 @@
 #define LOG_BUFFER_SIZE 512
 
 typedef struct Log_HandleTypeDef {
-	char		 buffer[LOG_BUFFER_SIZE];
-	uint16_t	 writeIndex;
-	uint16_t	 readIndex;
-	osThreadId_t logTask;
+	char	 buffer[LOG_BUFFER_SIZE];
+	uint16_t writeIndex;
 } Log_HandleTypeDef;
 
-void log_init(osThreadId_t taskHandle);
 void log_printf_va_list(const char *fmt, va_list args) __attribute__((format(printf, 1, 0)));
 void log_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 void output_log_buffer(void);

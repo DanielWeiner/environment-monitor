@@ -10,10 +10,6 @@ extern osMutexId_t		  logMutexHandle;
 extern UART_HandleTypeDef huart2;
 static Log_HandleTypeDef  logHandle = {0};
 
-void log_init(osThreadId_t taskHandle) {
-	logHandle.logTask = taskHandle;
-}
-
 void log_printf(const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
@@ -41,13 +37,35 @@ void log_printf_va_list(const char *fmt, va_list args) {
 		HAL_UART_Transmit(&huart2, (uint8_t *)logHandle.buffer, logHandle.writeIndex, HAL_MAX_DELAY);
 		logHandle.writeIndex = 0;
 	}
-	if (logHandle.logTask) xTaskNotifyGive(logHandle.logTask);
+	if (logMutexHandle) osMutexRelease(logMutexHandle);
+}
+
+static void log_printchar(char c) {
+	if (logMutexHandle) osMutexAcquire(logMutexHandle, osWaitForever);
+
+	logHandle.buffer[logHandle.writeIndex++] = c;
+	if (logHandle.writeIndex >= LOG_BUFFER_SIZE) {
+		HAL_UART_Transmit(&huart2, (uint8_t *)logHandle.buffer, LOG_BUFFER_SIZE, HAL_MAX_DELAY);
+		logHandle.writeIndex = 0;
+	}
+
 	if (logMutexHandle) osMutexRelease(logMutexHandle);
 }
 
 void output_log_buffer() {
+	// get a snapshot of the current log buffer index
 	if (logMutexHandle) osMutexAcquire(logMutexHandle, osWaitForever);
-	if (logHandle.writeIndex) {
+	uint16_t lastIndex = logHandle.writeIndex;
+	if (logMutexHandle) osMutexRelease(logMutexHandle);
+
+	// wait for 10 ms and see if the log buffer has changed
+	osDelay(10);
+
+	// if the write index is 0, that means the buffer is empty
+	// if the last index is not the same as the current, the buffer may be busy
+	// if the buffer is not busy and not empty, we can transmit the log
+	if (logMutexHandle) osMutexAcquire(logMutexHandle, osWaitForever);
+	if (logHandle.writeIndex > 0 && lastIndex == logHandle.writeIndex) {
 		HAL_UART_Transmit(&huart2, (uint8_t *)logHandle.buffer, logHandle.writeIndex, HAL_MAX_DELAY);
 		logHandle.writeIndex = 0;
 	}
@@ -55,6 +73,6 @@ void output_log_buffer() {
 }
 
 int __io_putchar(int ch) {
-	HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+	log_printchar(ch);
 	return ch;
 }
