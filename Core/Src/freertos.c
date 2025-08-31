@@ -179,12 +179,13 @@ void StartDefaultTask(void *argument) {
 
 	lcd_clear();
 	lcd_string(80, 160, "0", 1, 0xFFFF, ST7789_FONT_24);
-	uint32_t now = osKernelGetTickCount();
+	TickType_t		 now = xTaskGetTickCount();
+	const TickType_t delay = 1000;
 	for (;;) {
 		lcd_fill_rect(80, 160, 220, 184, 0);
 		int len = snprintf(tickStr, sizeof(tickStr), "%lu", now / 1000);
 		lcd_string(80, 160, tickStr, len, 0xFFFF, ST7789_FONT_24);
-		vTaskDelayUntil(&now, portTICK_PERIOD_MS * 1000);
+		vTaskDelayUntil(&now, delay);
 	}
 	/* USER CODE END StartDefaultTask */
 }
@@ -336,6 +337,8 @@ void StartESP8266ATTask(void *argument) {
 	} while (resp != lwespOK);
 
 	/* Infinite loop */
+	TickType_t				now = xTaskGetTickCount();
+	static const TickType_t delay = 5000;
 	for (;;) {
 		lwesp_conn_p conn;
 		if ((resp = lwesp_conn_start(&conn, LWESP_CONN_TYPE_SSL, CONN_HOST, CONN_PORT, xTaskGetCurrentTaskHandle(),
@@ -354,7 +357,7 @@ void StartESP8266ATTask(void *argument) {
 		} else {
 			printf("Cannot start connection to " CONN_HOST ": %s\r\n", response_str(resp));
 		}
-		osDelay(2000);
+		vTaskDelayUntil(&now, delay);
 	}
 	/* USER CODE END StartESP8266ATTask */
 }
