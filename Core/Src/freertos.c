@@ -270,6 +270,11 @@ static lwespr_t on_connection_event(struct lwesp_evt *evt) {
 			break;
 		case LWESP_EVT_CONN_CLOSE:
 			connection = (Connection *)lwesp_conn_get_arg(lwesp_evt_conn_close_get_conn(evt));
+			lwespr_t result = lwesp_evt_conn_close_get_result(evt);
+			if (result != lwespOK) {
+				status = CONNECTION_STATUS_ERROR;
+				break;
+			}
 			status = CONNECTION_STATUS_DISCONNECTED;
 			break;
 		case LWESP_EVT_CONN_ERROR:
