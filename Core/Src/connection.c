@@ -34,6 +34,7 @@ static lwespr_t on_connection_event(struct lwesp_evt *evt) {
 			connection = (Connection *)lwesp_conn_get_arg(lwesp_evt_conn_recv_get_conn(evt));
 			if (connection->status != CONNECTION_STATUS_CONNECTED) return lwespOK;
 			lwesp_pbuf_p buf = lwesp_evt_conn_recv_get_buff(evt);
+			connection->lastActivity = now;
 			if (!connection->buf) {
 				connection->buf = buf;
 				lwesp_pbuf_ref(connection->buf);
