@@ -59,6 +59,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/st7789_interface.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/log.c
 	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/lwesp_ll_stml432kc_nucleo.c
+	${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/connection.c
 )
 
 # Add include paths
