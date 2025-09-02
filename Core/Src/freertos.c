@@ -48,7 +48,7 @@ typedef StaticSemaphore_t osStaticMutexDef_t;
 #define CONN_HOST "httpbin.org"
 #define CONN_PORT 443
 #define REQUEST_FREQUENCY 5000
-#define LOG_OUTPUT_DELAY 10
+#define LOG_OUTPUT_DELAY 1
 
 /* USER CODE END PD */
 
@@ -239,11 +239,9 @@ static char *response_str(lwespr_t res) {
 	}
 }
 typedef enum ConnectionStatus {
-	CONNECTION_STATUS_UNINITIALIZED = 1,
+	CONNECTION_STATUS_UNINITIALIZED,
 	CONNECTION_STATUS_INITIALIZED,
 	CONNECTION_STATUS_ERROR,
-	CONNECTION_STATUS_SENDING,
-	CONNECTION_STATUS_RECEIVING,
 	CONNECTION_STATUS_CONNECTED,
 	CONNECTION_STATUS_DISCONNECTED
 } ConnectionStatus;
@@ -259,41 +257,43 @@ static lwespr_t lwesp_global_event_handler(struct lwesp_evt *evt) {
 	LWESP_UNUSED(evt);
 	return lwespOK;
 }
+
 static lwespr_t on_connection_event(struct lwesp_evt *evt) {
-	Connection		*connection;
-	ConnectionStatus status = 0;
+	Connection *connection;
 
 	switch (evt->type) {
 		case LWESP_EVT_CONN_ACTIVE:
 			connection = (Connection *)lwesp_conn_get_arg(lwesp_evt_conn_active_get_conn(evt));
-			status = CONNECTION_STATUS_CONNECTED;
+			connection->status = CONNECTION_STATUS_CONNECTED;
 			break;
 		case LWESP_EVT_CONN_CLOSE:
 			connection = (Connection *)lwesp_conn_get_arg(lwesp_evt_conn_close_get_conn(evt));
-			if (lwesp_evt_conn_close_get_result(evt) != lwespOK) {
-				status = CONNECTION_STATUS_ERROR;
-				break;
-			}
-			status = CONNECTION_STATUS_DISCONNECTED;
+			connection->status = lwesp_evt_conn_close_get_result(evt) == lwespOK ? CONNECTION_STATUS_DISCONNECTED
+																				 : CONNECTION_STATUS_ERROR;
 			break;
 		case LWESP_EVT_CONN_ERROR:
 			connection = (Connection *)lwesp_evt_conn_error_get_arg(evt);
-			status = CONNECTION_STATUS_ERROR;
+			connection->status = CONNECTION_STATUS_ERROR;
 			break;
 		case LWESP_EVT_CONN_SEND:
 			connection = (Connection *)lwesp_conn_get_arg(lwesp_evt_conn_send_get_conn(evt));
-			status = CONNECTION_STATUS_CONNECTED;
+			connection->status = CONNECTION_STATUS_CONNECTED;
 			break;
-		case LWESP_EVT_CONN_RECV:
+		case LWESP_EVT_CONN_RECV: {
 			connection = (Connection *)lwesp_conn_get_arg(lwesp_evt_conn_recv_get_conn(evt));
-			connection->buf = lwesp_evt_conn_recv_get_buff(evt);
-			status = CONNECTION_STATUS_RECEIVING;
-			break;
+			lwesp_pbuf_p buf = lwesp_evt_conn_recv_get_buff(evt);
+			if (!connection->buf) {
+				connection->buf = buf;
+				lwesp_pbuf_ref(connection->buf);
+			} else {
+				lwesp_pbuf_chain(connection->buf, buf);
+			}
+			return lwespOK;
+		}
 		default:
 			return lwespOK;
 	}
 
-	connection->status = status;
 	xTaskNotifyGive(connection->task);
 	return lwespOK;
 }
@@ -307,10 +307,13 @@ static const uint8_t req_data[] =
 
 	"Connection: close" DOUBLE_CRLF;
 
-static void on_data_packet(lwesp_pbuf_p *buf, size_t len) {
+static void on_close_connection(Connection *connection) {
 	size_t pos = 0;
 	void  *data;
-	while ((data = lwesp_pbuf_get_linear_addr(*buf, pos, &len)) != NULL) {
+	if (connection->buf == NULL) return;
+
+	size_t len = lwesp_pbuf_length(connection->buf, 1);
+	while ((data = lwesp_pbuf_get_linear_addr(connection->buf, pos, &len)) != NULL) {
 		printf("%.*s", (int)len, (const char *)data);
 		pos += len;
 	}
@@ -318,15 +321,15 @@ static void on_data_packet(lwesp_pbuf_p *buf, size_t len) {
 
 static void start_connection(Connection *connection, lwesp_conn_type_t connType, const char *host, size_t port) {
 	lwespr_t resp;
+	connection->buf = NULL;
+	connection->status = CONNECTION_STATUS_UNINITIALIZED;
 	if ((resp = lwesp_conn_start(&connection->conn, connType, host, port, connection, on_connection_event, 0)) !=
 		lwespOK) {
 		printf("Cannot start connection to %s:%d: %s" CRLF, host, port, response_str(resp));
-		connection->status = CONNECTION_STATUS_UNINITIALIZED;
 		return;
 	}
 	connection->status = CONNECTION_STATUS_INITIALIZED;
 	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-	return;
 }
 
 static void send_request(Connection *connection, const uint8_t *data, size_t len) {
@@ -340,26 +343,13 @@ static void send_request(Connection *connection, const uint8_t *data, size_t len
 	// Send the data in chunks whose size is determined by the internal tx buffer
 	while (len > 0 &&
 		   (resp = lwesp_conn_send(connection->conn, (const void *)data, len, &bytesWritten, 0)) == lwespOK) {
-		connection->status = CONNECTION_STATUS_SENDING;
-
-		while (ulTaskNotifyTake(pdTRUE, portMAX_DELAY)) {
-			if (connection->status == CONNECTION_STATUS_ERROR || connection->status == CONNECTION_STATUS_DISCONNECTED) {
-				return;
-			}
-
-			if (connection->status == CONNECTION_STATUS_RECEIVING) {
-				on_data_packet(&connection->buf, lwesp_pbuf_length(connection->buf, 1));
-				connection->status = CONNECTION_STATUS_CONNECTED;
-				continue;
-			}
-
-			if (connection->status == CONNECTION_STATUS_CONNECTED) {
-				printf("%.*s", (int)bytesWritten, (const char *)data);
-				len -= bytesWritten;
-				data += bytesWritten;
-				break;
-			}
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		if (connection->status == CONNECTION_STATUS_ERROR || connection->status == CONNECTION_STATUS_DISCONNECTED) {
+			return;
 		}
+		printf("%.*s", (int)bytesWritten, (const char *)data);
+		len -= bytesWritten;
+		data += bytesWritten;
 	}
 
 	if (resp != lwespOK) {
@@ -370,17 +360,11 @@ static void send_request(Connection *connection, const uint8_t *data, size_t len
 }
 
 static void wait_for_connection_closed(Connection *connection) {
-	while (connection->status != CONNECTION_STATUS_DISCONNECTED) {
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-		if (connection->status == CONNECTION_STATUS_ERROR) {
-			return;
-		}
-
-		if (connection->status == CONNECTION_STATUS_RECEIVING) {
-			on_data_packet(&connection->buf, lwesp_pbuf_length(connection->buf, 1));
-			connection->status = CONNECTION_STATUS_CONNECTED;
-		}
+	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+	if (connection->status == CONNECTION_STATUS_DISCONNECTED) {
+		on_close_connection(connection);
 	}
+	lwesp_pbuf_free_s(&connection->buf);
 }
 
 static void make_request(Connection *connection) {
@@ -395,7 +379,7 @@ static void make_request(Connection *connection) {
 		printf("Connection not closed properly" CRLF);
 		return;
 	}
-	printf("Connection closed" CRLF);
+	printf("Connection closed" DOUBLE_CRLF);
 }
 /**
  * @brief Function implementing the esp8266ATTask thread.
@@ -453,7 +437,8 @@ void StartESP8266ATTask(void *argument) {
 
 	/* Infinite loop */
 	TickType_t now = xTaskGetTickCount();
-	Connection connection = {.status = CONNECTION_STATUS_UNINITIALIZED, .task = xTaskGetCurrentTaskHandle()};
+
+	Connection connection = {.task = xTaskGetCurrentTaskHandle()};
 
 	for (;;) {
 		make_request(&connection);
